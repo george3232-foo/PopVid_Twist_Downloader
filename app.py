@@ -209,50 +209,56 @@ def download_video():
 
 @app.route("/api/combine", methods=["POST"])
 def combine_videos():
-    videos = request.json.get("videos", [])
-    if not videos:
-        return jsonify({"error": "No videos to combine"}), 400
+    try:
+        videos = request.json.get("videos", [])
+        if not videos:
+            return jsonify({"error": "No videos to combine"}), 400
 
-    job_id = str(uuid.uuid4())[:8]
-    job_dir = WORK_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
+        job_id = str(uuid.uuid4())[:8]
+        job_dir = WORK_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
 
-    paths = []
-    for i, v in enumerate(videos):
-        path = job_dir / f"part_{i:03d}.mp4"
-        try:
-            r = http.get(v["url"], headers=UA, stream=True, timeout=60)
+        paths = []
+        for i, v in enumerate(videos):
+            path = job_dir / f"part_{i:03d}.mp4"
+            r = http.get(v["url"], headers=UA, stream=True, timeout=120)
             r.raise_for_status()
             with open(path, "wb") as f:
                 for chunk in r.iter_content(8192):
                     if chunk:
                         f.write(chunk)
             paths.append(path)
-        except Exception as e:
-            return jsonify({"error": f"Failed downloading part {i + 1}: {e}"}), 500
 
-    if len(paths) == 1:
-        output = paths[0]
-    else:
-        concat_file = job_dir / "concat.txt"
-        concat_file.write_text("".join(f"file '{p.name}'\n" for p in paths))
-        output = job_dir / f"combined_{job_id}.mp4"
-        for cmd_extra in [["-c", "copy"], ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac"]]:
-            result = subprocess.run(
-                ["ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_file)]
-                + cmd_extra + ["-y", str(output)],
-                capture_output=True, text=True, timeout=300,
-            )
-            if result.returncode == 0:
-                break
+        if len(paths) == 1:
+            output = paths[0]
         else:
-            return jsonify({"error": f"ffmpeg failed: {result.stderr[:300]}"}), 500
+            concat_file = job_dir / "concat.txt"
+            concat_file.write_text("".join(f"file '{p.name}'\n" for p in paths))
+            output = job_dir / f"combined_{job_id}.mp4"
+            success = False
+            for cmd_extra in [["-c", "copy"], ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac"]]:
+                result = subprocess.run(
+                    ["ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_file)]
+                    + cmd_extra + ["-y", str(output)],
+                    capture_output=True, text=True, timeout=300,
+                )
+                if result.returncode == 0:
+                    success = True
+                    break
+            if not success:
+                return jsonify({"error": f"ffmpeg failed: {result.stderr[:300]}"}), 500
 
-    return jsonify({
-        "download_url": f"/api/combined/{job_id}",
-        "filename": f"popvid_combined_{job_id}.mp4",
-        "size": output.stat().st_size,
-    })
+        return jsonify({
+            "download_url": f"/api/combined/{job_id}",
+            "filename": f"popvid_combined_{job_id}.mp4",
+            "size": output.stat().st_size,
+        })
+    except FileNotFoundError:
+        return jsonify({"error": "ffmpeg not installed. Install it to combine videos, or download individually."}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "ffmpeg timed out — videos may be too large to combine"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/combined/<job_id>")
