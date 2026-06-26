@@ -26,7 +26,7 @@ PopVid videos can have "twists" — story continuations created by users. Each t
 ### Install & Run
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/PopVid_Twist_Downloader.git
+git clone https://github.com/george3232-foo/PopVid_Twist_Downloader.git
 cd PopVid_Twist_Downloader
 
 pip install -r requirements.txt
@@ -38,7 +38,7 @@ Open **http://localhost:5000** in your browser.
 
 ### Usage
 
-1. Paste a PopVid URL (e.g. `https://popvid.ai/vid/20260616203306_420976`)
+1. Paste a PopVid URL (e.g. `https://popvid.ai/vid/your_video_id`)
 2. Click **Discover** — the main video and its direct branches appear
 3. Click a branch to select it — it gets added to your path preview at the top
 4. If that branch has sub-branches, they appear in the grid below
