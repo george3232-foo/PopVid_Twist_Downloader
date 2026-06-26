@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PopVid Downloader</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root {
+  --bg: #08080d;
+  --surface: #111118;
+  --card: #16161f;
+  --card-hover: #1e1e2a;
+  --border: #252530;
+  --border-active: #7c3aed;
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --accent-light: #a78bfa;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --text: #eeeef2;
+  --text-secondary: #8888a0;
+  --text-muted: #555568;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+html { font-size: 15px }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 1.2rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+header h1 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+header .subtitle { color: var(--text-muted); font-size: .85rem }
+
+.input-section {
+  max-width: 800px;
+  margin: 2rem auto 0;
+  padding: 0 1.5rem;
+  display: flex;
+  gap: .75rem;
+}
+.input-section input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .9rem 1.2rem;
+  color: var(--text);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color .2s;
+}
+.input-section input:focus { border-color: var(--accent) }
+.input-section input::placeholder { color: var(--text-muted) }
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: .9rem 1.6rem;
+  font-size: .95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, transform .1s, opacity .2s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--accent-hover) }
+.btn:active { transform: scale(.97) }
+.btn:disabled { opacity: .4; cursor: not-allowed; transform: none }
+.btn-sm { padding: .5rem 1rem; font-size: .82rem; border-radius: var(--radius-sm) }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary) }
+.btn-outline:hover { border-color: var(--text-secondary); color: var(--text) }
+.btn-success { background: var(--success) }
+.btn-success:hover { background: #16a34a }
+.btn-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger) }
+.btn-danger:hover { background: rgba(239,68,68,.1) }
+.btn-ghost { background: transparent; color: var(--text-secondary); padding: .5rem .8rem }
+.btn-ghost:hover { color: var(--text); background: rgba(255,255,255,.05) }
+
+.status { max-width: 800px; margin: 2rem auto; padding: 0 1.5rem; text-align: center }
+.status.hidden { display: none }
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin: 0 auto 1rem;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
+.status p { color: var(--text-secondary); font-size: .95rem }
+.error-msg {
+  background: rgba(239,68,68,.1);
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: var(--radius-sm);
+  padding: .8rem 1.2rem;
+  color: var(--danger);
+  max-width: 800px;
+  margin: 1.5rem auto;
+  text-align: center;
+}
+.error-msg.hidden { display: none }
+
+/* ── Main Content ── */
+.main-content { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem }
+.main-content.hidden { display: none }
+
+/* ── Preview Section ── */
+.preview-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 2rem 0 1.5rem;
+  overflow: hidden;
+}
+.preview-header {
+  padding: 1rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.preview-header h3 {
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--accent-light);
+}
+.preview-player-wrap {
+  background: #000;
+  max-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-player-wrap video {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+}
+.preview-empty {
+  padding: 3rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+/* Path strip */
+.path-strip {
+  padding: .8rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.path-item {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .7rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: .78rem;
+  color: var(--text-secondary);
+  transition: all .2s;
+  flex-shrink: 0;
+}
+.path-item:hover { border-color: var(--accent); color: var(--text) }
+.path-item.active { border-color: var(--accent); background: rgba(124,58,237,.15); color: var(--text) }
+.path-badge {
+  width: 20px; height: 20px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.path-arrow { color: var(--text-muted); font-size: .8rem; flex-shrink: 0 }
+
+.preview-actions {
+  padding: .8rem 1.2rem;
+  display: flex;
+  gap: .5rem;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Navigation Bar ── */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin-bottom: 1.2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  flex: 1;
+  overflow-x: auto;
+  font-size: .85rem;
+}
+.breadcrumb-item { color: var(--text-muted); white-space: nowrap }
+.breadcrumb-item.current { color: var(--accent-light); font-weight: 600 }
+.breadcrumb-sep { color: var(--text-muted); font-size: .7rem }
+.nav-bar .level-label {
+  font-size: .8rem;
+  color: var(--text-muted);
+  background: rgba(124,58,237,.1);
+  padding: .2rem .6rem;
+  border-radius: 4px;
+}
+
+/* ── Branch Grid ── */
+.branch-section-header {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin-bottom: 1rem;
+}
+.branch-section-header h2 { font-size: 1.05rem; font-weight: 600 }
+.branch-section-header .badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: .72rem;
+  padding: .15rem .5rem;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.branch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.2rem;
+  padding-bottom: 2rem;
+}
+
+.branch-card {
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color .25s, background .25s, transform .15s;
+  cursor: pointer;
+  position: relative;
+}
+.branch-card:hover {
+  border-color: #3a3a50;
+  background: var(--card-hover);
+  transform: translateY(-2px);
+}
+.video-wrapper {
+  position: relative;
+  background: #000;
+  aspect-ratio: 16/9;
+}
+.video-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.card-category {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: .15rem .45rem;
+  border-radius: 4px;
+  font-weight: 600;
+  z-index: 2;
+}
+.cat-original { background: rgba(34,197,94,.2); color: var(--success) }
+.cat-part { background: rgba(59,130,246,.2); color: #60a5fa }
+.cat-story { background: rgba(245,158,11,.2); color: var(--warning) }
+
+.branch-indicator {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(124,58,237,.85);
+  color: #fff;
+  font-size: .65rem;
+  padding: .2rem .5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+}
+
+.card-body { padding: .7rem 1rem }
+.card-label {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--text);
+  display: block;
+  margin-bottom: .4rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  gap: .5rem;
+  padding: 0 1rem .7rem;
+}
+.card-actions .btn-sm { flex: 1; text-align: center }
+
+/* ── Leaf / End State ── */
+.leaf-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  color: var(--text-secondary);
+}
+.leaf-state.hidden { display: none }
+.leaf-state p { margin-bottom: 1.2rem; font-size: .95rem }
+
+/* ── Loading branches ── */
+.branch-loading {
+  text-align: center;
+  padding: 2rem;
+}
+.branch-loading.hidden { display: none }
+
+/* ── Overlay ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,8,13,.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+.overlay.hidden { display: none }
+.overlay p { margin-top: 1rem; color: var(--text-secondary) }
+.overlay .sub { font-size: .85rem; color: var(--text-muted); margin-top: .3rem }
+
+@media (max-width: 700px) {
+  .branch-grid { grid-template-columns: 1fr }
+  .input-section { flex-direction: column }
+  .preview-actions { flex-direction: column }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PopVid Downloader</h1>
+  <span class="subtitle">Discover branches, preview path, download</span>
+</header>
+
+<div class="input-section">
+  <input type="text" id="url-input" placeholder="Paste a PopVid URL (e.g. https://popvid.ai/vid/...)" autofocus>
+  <button class="btn" id="discover-btn" onclick="discover()">Discover</button>
+</div>
+
+<div class="error-msg hidden" id="error-msg"></div>
+
+<div class="status hidden" id="loading">
+  <div class="spinner"></div>
+  <p>Discovering video branches...</p>
+  <p style="font-size:.8rem;color:var(--text-muted);margin-top:.3rem">Probing CDN + story API</p>
+</div>
+
+<div class="main-content hidden" id="main-content">
+
+  <!-- Preview Section -->
+  <div class="preview-section">
+    <div class="preview-header">
+      <h3>Your Path Preview</h3>
+      <span id="preview-counter" style="font-size:.8rem;color:var(--text-muted)"></span>
+    </div>
+    <div class="preview-player-wrap" id="preview-player-wrap">
+      <div class="preview-empty" id="preview-empty">Select branches below to build your video path</div>
+      <video id="preview-player" controls playsinline style="display:none"></video>
+    </div>
+    <div class="path-strip" id="path-strip"></div>
+    <div class="preview-actions">
+      <button class="btn btn-sm btn-outline" onclick="playPreviewFromStart()" id="play-all-btn" disabled>
+        Play All
+      </button>
+      <button class="btn btn-sm btn-success" onclick="downloadPath()" id="download-btn" disabled>
+        Download Path
+      </button>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <div class="nav-bar">
+    <button class="btn btn-sm btn-ghost" onclick="goBack()" id="back-btn" style="display:none">
+      &#8592; Back
+    </button>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <span class="level-label" id="level-label"></span>
+  </div>
+
+  <!-- Branch Grid -->
+  <div class="branch-section-header">
+    <h2>Choose a branch</h2>
+    <span class="badge" id="branch-count">0</span>
+  </div>
+
+  <div class="branch-loading hidden" id="branch-loading">
+    <div class="spinner"></div>
+    <p style="color:var(--text-secondary);font-size:.9rem">Discovering sub-branches...</p>
+  </div>
+
+  <div class="branch-grid" id="branch-grid"></div>
+
+  <div class="leaf-state hidden" id="leaf-state">
+    <p>End of this branch — no further continuations found.</p>
+    <div style="display:flex;gap:.5rem;justify-content:center">
+      <button class="btn btn-sm btn-outline" onclick="goBack()">&#8592; Go Back</button>
+      <button class="btn btn-sm btn-success" onclick="downloadPath()">Download Path</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="overlay hidden" id="overlay">
+  <div class="spinner" style="width:48px;height:48px;border-width:4px"></div>
+  <p id="overlay-msg">Combining videos...</p>
+  <p class="sub" id="overlay-sub"></p>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+let memeId = '';
+let mainVideo = null;
+let pathVideos = [];       // [{url, label, node_id}]
+let navStack = [];         // [{label, node_id, branches: [...]}]
+let previewIdx = 0;
+const previewPlayer = $('#preview-player');
+
+$('#url-input').addEventListener('keydown', e => { if (e.key === 'Enter') discover() });
+
+// Sequential preview playback
+previewPlayer.addEventListener('ended', () => {
+  previewIdx++;
+  if (previewIdx < pathVideos.length) {
+    previewPlayer.src = proxyUrl(pathVideos[previewIdx].url);
+    previewPlayer.play();
+    highlightPathItem(previewIdx);
+  }
+});
+
+function proxyUrl(url) {
+  return '/api/proxy?url=' + encodeURIComponent(url);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function discover() {
+  const url = $('#url-input').value.trim();
+  if (!url) return;
+
+  $('#error-msg').classList.add('hidden');
+  $('#main-content').classList.add('hidden');
+  $('#loading').classList.remove('hidden');
+  $('#discover-btn').disabled = true;
+
+  // Reset state
+  memeId = '';
+  mainVideo = null;
+  pathVideos = [];
+  navStack = [];
+
+  try {
+    const resp = await fetch('/api/discover', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showError(data.error || 'Discovery failed'); return }
+
+    memeId = data.meme_id;
+    mainVideo = data.main_video;
+
+    // Main video is always first in path
+    if (mainVideo) {
+      pathVideos.push({url: mainVideo.url, label: mainVideo.label, node_id: null});
+    }
+
+    // Push root level
+    navStack.push({label: 'Main', node_id: memeId, branches: data.branches});
+
+    renderAll();
+    $('#main-content').classList.remove('hidden');
+  } catch (e) {
+    showError('Network error: ' + e.message);
+  } finally {
+    $('#loading').classList.add('hidden');
+    $('#discover-btn').disabled = false;
+  }
+}
+
+function showError(msg) {
+  $('#error-msg').textContent = msg;
+  $('#error-msg').classList.remove('hidden');
+}
+
+function renderAll() {
+  renderPreview();
+  renderBreadcrumb();
+  renderBranches();
+}
+
+// ── Preview ──
+
+function renderPreview() {
+  const strip = $('#path-strip');
+  strip.innerHTML = '';
+
+  if (pathVideos.length === 0) {
+    previewPlayer.style.display = 'none';
+    $('#preview-empty').style.display = '';
+    $('#play-all-btn').disabled = true;
+    $('#download-btn').disabled = true;
+    $('#preview-counter').textContent = '';
+    return;
+  }
+
+  previewPlayer.style.display = '';
+  $('#preview-empty').style.display = 'none';
+  $('#play-all-btn').disabled = pathVideos.length < 2;
+  $('#download-btn').disabled = false;
+  $('#preview-counter').textContent = pathVideos.length + ' video' + (pathVideos.length > 1 ? 's' : '') + ' in path';
+
+  // Load first video if nothing playing
+  if (!previewPlayer.src || previewPlayer.src === location.href) {
+    previewPlayer.src = proxyUrl(pathVideos[0].url);
+    previewIdx = 0;
+  }
+
+  pathVideos.forEach((v, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('span');
+      arrow.className = 'path-arrow';
+      arrow.textContent = '→';
+      strip.appendChild(arrow);
+    }
+    const item = document.createElement('div');
+    item.className = 'path-item' + (i === previewIdx ? ' active' : '');
+    item.dataset.idx = i;
+    item.innerHTML = `<span class="path-badge">${i + 1}</span><span>${esc(v.label.length > 30 ? v.label.slice(0, 28) + '...' : v.label)}</span>`;
+    item.addEventListener('click', () => {
+      previewIdx = i;
+      previewPlayer.src = proxyUrl(pathVideos[i].url);
+      previewPlayer.play();
+      highlightPathItem(i);
+    });
+    strip.appendChild(item);
+  });
+
+  // Auto-scroll to end
+  strip.scrollLeft = strip.scrollWidth;
+}
+
+function highlightPathItem(idx) {
+  $$('.path-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+}
+
+function playPreviewFromStart() {
+  if (pathVideos.length === 0) return;
+  previewIdx = 0;
+  previewPlayer.src = proxyUrl(pathVideos[0].url);
+  previewPlayer.play();
+  highlightPathItem(0);
+}
+
+// ── Breadcrumb ──
+
+function renderBreadcrumb() {
+  const bc = $('#breadcrumb');
+  bc.innerHTML = '';
+  navStack.forEach((level, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-sep';
+      sep.textContent = '›';
+      bc.appendChild(sep);
+    }
+    const item = document.createElement('span');
+    item.className = 'breadcrumb-item' + (i === navStack.length - 1 ? ' current' : '');
+    item.textContent = level.label;
+    bc.appendChild(item);
+  });
+
+  $('#back-btn').style.display = navStack.length > 1 ? '' : 'none';
+  $('#level-label').textContent = 'Depth ' + (navStack.length - 1);
+}
+
+// ── Branches ──
+
+function renderBranches() {
+  const current = navStack[navStack.length - 1];
+  const branches = current.branches;
+  const grid = $('#branch-grid');
+  grid.innerHTML = '';
+
+  $('#branch-count').textContent = branches.length;
+  $('#leaf-state').classList.toggle('hidden', branches.length > 0);
+  grid.style.display = branches.length > 0 ? '' : 'none';
+
+  branches.forEach(branch => {
+    const card = document.createElement('div');
+    card.className = 'branch-card';
+
+    const catClass = branch.category === 'original' ? 'cat-original'
+      : branch.category === 'part' ? 'cat-part' : 'cat-story';
+    const catLabel = branch.category === 'original' ? 'Original'
+      : branch.category === 'part' ? 'Part' : 'Story';
+
+    const branchHint = branch.has_branches
+      ? '<div class="branch-indicator">&#9734; Has branches</div>'
+      : '';
+
+    card.innerHTML = `
+      <div class="video-wrapper">
+        <video
+          src="${proxyUrl(branch.url)}"
+          preload="metadata"
+          controls loop playsinline
+        ></video>
+        <span class="card-category ${catClass}">${catLabel}</span>
+        ${branchHint}
+      </div>
+      <div class="card-body">
+        <span class="card-label" title="${esc(branch.label)}">${esc(branch.label)}</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation(); selectBranch(${branch.id})">
+          ${branch.has_branches ? 'Select & Explore' : 'Select'}
+        </button>
+        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation(); downloadSingle(${branch.id})">
+          Download
+        </button>
+      </div>
+    `;
+
+    // Pause other videos on play
+    card.querySelector('video').addEventListener('play', function() {
+      $$('.branch-card video').forEach(v => { if (v !== this) v.pause() });
+    });
+
+    // Click card body = select
+    card.addEventListener('click', e => {
+      if (e.target.closest('video') || e.target.closest('button')) return;
+      selectBranch(branch.id);
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+async function selectBranch(id) {
+  const current = navStack[navStack.length - 1];
+  const branch = current.branches.find(b => b.id === id);
+  if (!branch) return;
+
+  // Pause all grid videos
+  $$('.branch-card video').forEach(v => v.pause());
+
+  // Add to path
+  pathVideos.push({url: branch.url, label: branch.label, node_id: branch.node_id});
+
+  // Load in preview player
+  previewIdx = pathVideos.length - 1;
+  previewPlayer.src = proxyUrl(branch.url);
+  previewPlayer.play();
+
+  renderPreview();
+
+  // If story node → discover sub-branches
+  if (branch.node_id) {
+    $('#branch-loading').classList.remove('hidden');
+    $('#branch-grid').style.display = 'none';
+    $('#leaf-state').classList.add('hidden');
+
+    try {
+      const resp = await fetch('/api/branches', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({node_id: branch.node_id, meme_id: memeId})
+      });
+      const data = await resp.json();
+
+      if (resp.ok && data.branches.length > 0) {
+        navStack.push({label: branch.label.slice(0, 40), node_id: branch.node_id, branches: data.branches});
+      } else {
+        // No sub-branches — push empty level to show leaf state
+        navStack.push({label: branch.label.slice(0, 40), node_id: branch.node_id, branches: []});
+      }
+    } catch (e) {
+      navStack.push({label: branch.label.slice(0, 40), node_id: branch.node_id, branches: []});
+    } finally {
+      $('#branch-loading').classList.add('hidden');
+    }
+  } else {
+    // CDN part/original — leaf, push empty level
+    navStack.push({label: branch.label.slice(0, 40), node_id: null, branches: []});
+  }
+
+  renderBreadcrumb();
+  renderBranches();
+}
+
+function goBack() {
+  if (navStack.length <= 1) return;
+  navStack.pop();
+  pathVideos.pop();
+
+  // Update preview player to last in path
+  if (pathVideos.length > 0) {
+    previewIdx = pathVideos.length - 1;
+    previewPlayer.src = proxyUrl(pathVideos[previewIdx].url);
+  } else {
+    previewPlayer.removeAttribute('src');
+    previewPlayer.load();
+  }
+
+  renderAll();
+}
+
+function downloadSingle(id) {
+  const current = navStack[navStack.length - 1];
+  const branch = current.branches.find(b => b.id === id);
+  if (!branch) return;
+  const filename = branch.label.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '_') + '.mp4';
+  const a = document.createElement('a');
+  a.href = '/api/download?url=' + encodeURIComponent(branch.url) + '&filename=' + encodeURIComponent(filename);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function downloadPath() {
+  if (pathVideos.length === 0) return;
+
+  const videos = pathVideos.map(v => ({url: v.url, label: v.label}));
+
+  if (videos.length === 1) {
+    // Single video — direct download
+    const v = videos[0];
+    const filename = v.label.replace(/[^a-zA-Z0-9_\-. ]/g, '').replace(/\s+/g, '_') + '.mp4';
+    const a = document.createElement('a');
+    a.href = '/api/download?url=' + encodeURIComponent(v.url) + '&filename=' + encodeURIComponent(filename);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return;
+  }
+
+  showOverlay('Combining ' + videos.length + ' videos...', 'Downloading parts and running ffmpeg');
+  $('#download-btn').disabled = true;
+
+  try {
+    const resp = await fetch('/api/combine', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({videos})
+    });
+    const data = await resp.json();
+    if (!resp.ok) { hideOverlay(); showError(data.error || 'Combine failed'); return }
+
+    hideOverlay();
+    const a = document.createElement('a');
+    a.href = data.download_url;
+    a.download = data.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    hideOverlay();
+    showError('Combine error: ' + e.message);
+  } finally {
+    $('#download-btn').disabled = false;
+  }
+}
+
+function showOverlay(msg, sub) {
+  $('#overlay-msg').textContent = msg;
+  $('#overlay-sub').textContent = sub || '';
+  $('#overlay').classList.remove('hidden');
+}
+function hideOverlay() { $('#overlay').classList.add('hidden') }
+</script>
+</body>
+</html>
