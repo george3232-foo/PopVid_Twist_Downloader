@@ -274,7 +274,11 @@ def download_combined(job_id):
 
 
 if __name__ == "__main__":
-    print(f"PopVid Downloader running")
+    import shutil
+    if not shutil.which("ffmpeg"):
+        print("\n⚠  ffmpeg not found! Combining videos will fail.")
+        print("   Install: sudo apt install ffmpeg  (or brew install ffmpeg on mac)\n")
+    print(f"PopVid Twist Downloader running")
     print(f"Temp dir: {WORK_DIR}")
     print(f"Open: http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)

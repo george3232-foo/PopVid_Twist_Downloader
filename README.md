@@ -21,7 +21,7 @@ PopVid videos can have "twists" — story continuations created by users. Each t
 ### Prerequisites
 
 - **Python 3.8+**
-- **ffmpeg** (optional — only needed to combine multiple videos into one file)
+- **ffmpeg** — required for combining/downloading multi-branch paths
 
 ### Install & Run
 
@@ -29,8 +29,15 @@ PopVid videos can have "twists" — story continuations created by users. Each t
 git clone https://github.com/george3232-foo/PopVid_Twist_Downloader.git
 cd PopVid_Twist_Downloader
 
+# Install ffmpeg (required for combining videos)
+sudo apt install ffmpeg        # Debian/Ubuntu/Kali
+# brew install ffmpeg          # macOS
+# winget install ffmpeg        # Windows
+
+# Install Python dependencies
 pip install -r requirements.txt
 
+# Run
 python3 app.py
 ```
 
@@ -44,23 +51,6 @@ Open **http://localhost:5000** in your browser.
 4. If that branch has sub-branches, they appear in the grid below
 5. Keep drilling down, or click **Back** to try a different path
 6. When satisfied with the preview, click **Download Path**
-
-### Installing ffmpeg (optional)
-
-Only needed if you want to combine multiple branch videos into a single file.
-
-```bash
-# Debian/Ubuntu/Kali
-sudo apt install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# Download from https://ffmpeg.org/download.html and add to PATH
-```
-
-Without ffmpeg, you can still download individual branch videos — just not combine them.
 
 ## Project Structure
 
