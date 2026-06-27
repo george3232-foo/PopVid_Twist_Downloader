@@ -412,11 +412,15 @@ header .subtitle { color: var(--text-muted); font-size: .85rem }
     <div class="preview-player-wrap" id="preview-player-wrap">
       <div class="preview-empty" id="preview-empty">Select branches below to build your video path</div>
       <video id="preview-player" controls playsinline style="display:none"></video>
+      <video id="preview-player-b" controls playsinline style="display:none"></video>
     </div>
     <div class="path-strip" id="path-strip"></div>
     <div class="preview-actions">
       <button class="btn btn-sm btn-outline" onclick="playPreviewFromStart()" id="play-all-btn" disabled>
         Play All
+      </button>
+      <button class="btn btn-sm btn-outline" onclick="hdPreview()" id="hd-preview-btn" disabled>
+        HD Preview
       </button>
       <button class="btn btn-sm btn-success" onclick="downloadPath()" id="download-btn" disabled>
         Download Path
@@ -471,19 +475,44 @@ let mainVideo = null;
 let pathVideos = [];       // [{url, label, node_id}]
 let navStack = [];         // [{label, node_id, branches: [...]}]
 let previewIdx = 0;
-const previewPlayer = $('#preview-player');
+const previewPlayerA = $('#preview-player');
+const previewPlayerB = $('#preview-player-b');
+let activePreview = previewPlayerA;
+let standbyPreview = previewPlayerB;
+let preloadedIdx = -1;
 
 $('#url-input').addEventListener('keydown', e => { if (e.key === 'Enter') discover() });
 
-// Sequential preview playback
-previewPlayer.addEventListener('ended', () => {
+// ponytail: dual-video pre-buffer — swap on ended for near-zero gap
+function handlePreviewEnded() {
   previewIdx++;
-  if (previewIdx < pathVideos.length) {
-    previewPlayer.src = proxyUrl(pathVideos[previewIdx].url);
-    previewPlayer.play();
-    highlightPathItem(previewIdx);
+  if (previewIdx >= pathVideos.length) return;
+
+  if (preloadedIdx === previewIdx && standbyPreview.readyState >= 2) {
+    activePreview.style.display = 'none';
+    activePreview.pause();
+    standbyPreview.style.display = '';
+    standbyPreview.play();
+    const tmp = activePreview; activePreview = standbyPreview; standbyPreview = tmp;
+  } else {
+    activePreview.src = proxyUrl(pathVideos[previewIdx].url);
+    activePreview.play();
   }
-});
+  highlightPathItem(previewIdx);
+  preloadNextVideo();
+}
+
+function preloadNextVideo() {
+  const nextIdx = previewIdx + 1;
+  if (nextIdx >= pathVideos.length) return;
+  if (preloadedIdx === nextIdx) return;
+  standbyPreview.src = proxyUrl(pathVideos[nextIdx].url);
+  standbyPreview.load();
+  preloadedIdx = nextIdx;
+}
+
+previewPlayerA.addEventListener('ended', handlePreviewEnded);
+previewPlayerB.addEventListener('ended', handlePreviewEnded);
 
 function proxyUrl(url) {
   return '/api/proxy?url=' + encodeURIComponent(url);
@@ -504,11 +533,17 @@ async function discover() {
   $('#loading').classList.remove('hidden');
   $('#discover-btn').disabled = true;
 
-  // Reset state
+  // Reset state — clear cached video cards from all levels
   memeId = '';
   mainVideo = null;
   pathVideos = [];
   navStack = [];
+  preloadedIdx = -1;
+  activePreview = previewPlayerA;
+  standbyPreview = previewPlayerB;
+  previewPlayerB.style.display = 'none';
+  previewPlayerB.removeAttribute('src');
+  $('#branch-grid').innerHTML = '';
 
   try {
     const resp = await fetch('/api/discover', {
@@ -558,23 +593,27 @@ function renderPreview() {
   strip.innerHTML = '';
 
   if (pathVideos.length === 0) {
-    previewPlayer.style.display = 'none';
+    activePreview.style.display = 'none';
+    standbyPreview.style.display = 'none';
     $('#preview-empty').style.display = '';
     $('#play-all-btn').disabled = true;
+    $('#hd-preview-btn').disabled = true;
     $('#download-btn').disabled = true;
     $('#preview-counter').textContent = '';
     return;
   }
 
-  previewPlayer.style.display = '';
+  activePreview.style.display = '';
+  standbyPreview.style.display = 'none';
   $('#preview-empty').style.display = 'none';
   $('#play-all-btn').disabled = pathVideos.length < 2;
+  $('#hd-preview-btn').disabled = pathVideos.length < 2;
   $('#download-btn').disabled = false;
   $('#preview-counter').textContent = pathVideos.length + ' video' + (pathVideos.length > 1 ? 's' : '') + ' in path';
 
   // Load first video if nothing playing
-  if (!previewPlayer.src || previewPlayer.src === location.href) {
-    previewPlayer.src = proxyUrl(pathVideos[0].url);
+  if (!activePreview.src || activePreview.src === location.href) {
+    activePreview.src = proxyUrl(pathVideos[0].url);
     previewIdx = 0;
   }
 
@@ -589,17 +628,28 @@ function renderPreview() {
     item.className = 'path-item' + (i === previewIdx ? ' active' : '');
     item.dataset.idx = i;
     item.innerHTML = `<span class="path-badge">${i + 1}</span><span>${esc(v.label.length > 30 ? v.label.slice(0, 28) + '...' : v.label)}</span>`;
-    item.addEventListener('click', () => {
-      previewIdx = i;
-      previewPlayer.src = proxyUrl(pathVideos[i].url);
-      previewPlayer.play();
-      highlightPathItem(i);
-    });
+    item.addEventListener('click', () => navigateToPathLevel(i));
     strip.appendChild(item);
   });
 
   // Auto-scroll to end
   strip.scrollLeft = strip.scrollWidth;
+}
+
+function navigateToPathLevel(targetIdx) {
+  // Remove everything after targetIdx — destructive back-navigation
+  while (navStack.length - 1 > targetIdx) {
+    const abandonedLevel = navStack.length - 1;
+    navStack.pop();
+    pathVideos.pop();
+    $('#branch-grid').querySelectorAll(`[data-level="${abandonedLevel}"]`).forEach(c => c.remove());
+  }
+  previewIdx = pathVideos.length - 1;
+  activePreview.src = proxyUrl(pathVideos[previewIdx].url);
+  standbyPreview.style.display = 'none';
+  activePreview.style.display = '';
+  preloadedIdx = -1;
+  renderAll();
 }
 
 function highlightPathItem(idx) {
@@ -611,9 +661,50 @@ function highlightPathItem(idx) {
 function playPreviewFromStart() {
   if (pathVideos.length === 0) return;
   previewIdx = 0;
-  previewPlayer.src = proxyUrl(pathVideos[0].url);
-  previewPlayer.play();
+  preloadedIdx = -1;
+
+  activePreview = previewPlayerA;
+  standbyPreview = previewPlayerB;
+  previewPlayerA.src = proxyUrl(pathVideos[0].url);
+  previewPlayerA.style.display = '';
+  previewPlayerA.play();
+  previewPlayerB.style.display = 'none';
+
+  preloadNextVideo();
   highlightPathItem(0);
+}
+
+async function hdPreview() {
+  if (pathVideos.length < 2) return;
+  const btn = $('#hd-preview-btn');
+  btn.disabled = true;
+  btn.textContent = 'Combining...';
+  showOverlay('Creating HD Preview...', 'Downloading and combining ' + pathVideos.length + ' videos with ffmpeg');
+
+  try {
+    const resp = await fetch('/api/combine', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({videos: pathVideos.map(v => ({url: v.url, label: v.label}))})
+    });
+    const data = await resp.json();
+    if (!resp.ok) { hideOverlay(); showError(data.error || 'Combine failed'); return; }
+
+    hideOverlay();
+    // Play combined video in preview player
+    standbyPreview.style.display = 'none';
+    activePreview.src = data.download_url;
+    activePreview.style.display = '';
+    activePreview.play();
+    previewIdx = 0;
+    highlightPathItem(0);
+  } catch (e) {
+    hideOverlay();
+    showError('HD Preview error: ' + e.message);
+  } finally {
+    btn.textContent = 'HD Preview';
+    btn.disabled = pathVideos.length < 2;
+  }
 }
 
 // ── Breadcrumb ──
@@ -644,15 +735,25 @@ function renderBranches() {
   const current = navStack[navStack.length - 1];
   const branches = current.branches;
   const grid = $('#branch-grid');
-  grid.innerHTML = '';
 
   $('#branch-count').textContent = branches.length;
   $('#leaf-state').classList.toggle('hidden', branches.length > 0);
   grid.style.display = branches.length > 0 ? '' : 'none';
 
+  const level = navStack.length - 1;
+
+  // ponytail: hide/show, never detach — videos keep loaded state = truly instant
+  grid.querySelectorAll('.branch-card').forEach(c => {
+    c.style.display = c.dataset.level == level ? '' : 'none';
+  });
+
+  // Already rendered this level — done
+  if (grid.querySelector(`[data-level="${level}"]`)) return;
+
   branches.forEach(branch => {
     const card = document.createElement('div');
     card.className = 'branch-card';
+    card.dataset.level = level;
 
     const catClass = branch.category === 'original' ? 'cat-original'
       : branch.category === 'part' ? 'cat-part' : 'cat-story';
@@ -714,8 +815,11 @@ async function selectBranch(id) {
 
   // Load in preview player
   previewIdx = pathVideos.length - 1;
-  previewPlayer.src = proxyUrl(branch.url);
-  previewPlayer.play();
+  standbyPreview.style.display = 'none';
+  activePreview.style.display = '';
+  activePreview.src = proxyUrl(branch.url);
+  activePreview.play();
+  preloadedIdx = -1;
 
   renderPreview();
 
@@ -755,16 +859,24 @@ async function selectBranch(id) {
 
 function goBack() {
   if (navStack.length <= 1) return;
+  const abandonedLevel = navStack.length - 1;
   navStack.pop();
   pathVideos.pop();
 
+  // Remove abandoned level's video cards (frees memory)
+  $('#branch-grid').querySelectorAll(`[data-level="${abandonedLevel}"]`).forEach(c => c.remove());
+
   // Update preview player to last in path
+  standbyPreview.style.display = 'none';
+  preloadedIdx = -1;
   if (pathVideos.length > 0) {
     previewIdx = pathVideos.length - 1;
-    previewPlayer.src = proxyUrl(pathVideos[previewIdx].url);
+    activePreview.src = proxyUrl(pathVideos[previewIdx].url);
+    activePreview.style.display = '';
   } else {
-    previewPlayer.removeAttribute('src');
-    previewPlayer.load();
+    activePreview.removeAttribute('src');
+    activePreview.load();
+    activePreview.style.display = 'none';
   }
 
   renderAll();
